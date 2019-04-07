@@ -1,26 +1,42 @@
+const path = require('path')
+require('dotenv').config({
+  path: path.join(__dirname, '/.env')
+})
 const Koa = require('koa')
+
 const app = new Koa()
 const views = require('koa-views')
 const json = require('koa-json')
 const onerror = require('koa-onerror')
-const bodyparser = require('koa-bodyparser')
+// const bodyparser = require('koa-bodyparser')
 const logger = require('koa-logger')
-
-const index = require('./routes/index')
-const users = require('./routes/users')
-
+const authorize = require('./app/middleware/authenticate')
+const cors = require('koa2-cors')
+const apiRouter = require('./routes/api')
+const session = require('./routes/api/session')
+const koaBody = require('koa-body')
 // error handler
 onerror(app)
 
 // middlewares
-app.use(bodyparser({
-  enableTypes:['json', 'form', 'text']
-}))
+// app.use(bodyparser({
+//   enableTypes: ['json', 'form', 'text']
+// }))
+app.use(
+  koaBody({
+    multipart: true,
+    formidable: {
+      maxFieldsSize: 500 * 1024 * 1024
+    }
+  })
+)
 app.use(json())
-app.use(logger())
-app.use(require('koa-static')(__dirname + '/public'))
+if (process.env.NODE_ENV !== 'test') {
+  app.use(logger())
+}
+app.use(require('koa-static')(`${__dirname}/public`))
 
-app.use(views(__dirname + '/views', {
+app.use(views(`${__dirname}/views`, {
   extension: 'pug'
 }))
 
@@ -33,12 +49,14 @@ app.use(async (ctx, next) => {
 })
 
 // routes
-app.use(index.routes(), index.allowedMethods())
-app.use(users.routes(), users.allowedMethods())
+app.use(cors())
+app.use(session.routes())
+app.use(authorize())
+app.use(apiRouter.routes(), apiRouter.allowedMethods())
 
 // error-handling
 app.on('error', (err, ctx) => {
   console.error('server error', err, ctx)
-});
+})
 
 module.exports = app
